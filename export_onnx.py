@@ -14,33 +14,41 @@ import models
 from models.experimental import attempt_load
 from utils.activations import Hardswish, SiLU
 from utils.general import set_logging
+from utils.torch_utils import select_device
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='./yolov5s.pt', help='weights path')  # from yolov5/models/
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='image size')  # height, width
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     opt = parser.parse_args()
     opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
     print(opt)
     set_logging()
 
-    # Input
-    img = torch.zeros((opt.batch_size, 3, *opt.img_size))  # image size(1,3,320,192) iDetection
+    device = select_device(opt.device)
+    half = device.type != 'cpu'  # half precision only supported on CUDA
 
     # Load PyTorch model
-    model = attempt_load(opt.weights, map_location=torch.device('cpu'))  # load FP32 model
+    model = attempt_load(opt.weights, map_location=device)
+    if half:
+        model.half()  # to FP16
+
+    # Input
+    img = torch.zeros((opt.batch_size, 3, *opt.img_size)).type_as(next(model.parameters()))  # image size(1,3,320,192) iDetection
 
     # Update model
-    for k, m in model.named_modules():
-        m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
-        if isinstance(m, models.common.Conv):  # assign export-friendly activations
-            if isinstance(m.act, nn.Hardswish):
-                m.act = Hardswish()
-            elif isinstance(m.act, nn.SiLU):
-                m.act = SiLU()
-        # if isinstance(m, models.yolo.Detect):
-        #     m.forward = m.forward_export  # assign forward (optional)
+    # for k, m in model.named_modules():
+    #     m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
+    #     if isinstance(m, models.common.Conv):  # assign export-friendly activations
+    #         if isinstance(m.act, nn.Hardswish):
+    #             m.act = Hardswish()
+    #         elif isinstance(m.act, nn.SiLU):
+    #             m.act = SiLU()
+    #     # if isinstance(m, models.yolo.Detect):
+    #     #     m.forward = m.forward_export  # assign forward (optional)
     model.model[-1].export = True  # set Detect() layer export=True
     y = model(img)  # dry run
 
