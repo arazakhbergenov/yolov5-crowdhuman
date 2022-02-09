@@ -2,7 +2,7 @@
 Exports a YOLOv5 *.pt model to ONNX and TorchScript formats
 
 Usage:
-    $ python export_onnx.py --weights crowdhuman_yolov5m.pt --img 640 --batch 1
+    $ python export_onnx.py --weights crowdhuman_yolov5m.pt --img-size 640 --batch-size 1
 """
 
 import argparse
@@ -20,9 +20,10 @@ from utils.torch_utils import select_device
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='./yolov5s.pt', help='weights path')  # from yolov5/models/
-    parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='image size')  # height, width
+    parser.add_argument('--img-size', nargs='+', type=int, default=[384, 640], help='image size')  # height, width
     parser.add_argument('--batch-size', type=int, default=1, help='batch size')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--include-resolution', action='store_true')
     opt = parser.parse_args()
     opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
     print(opt)
@@ -59,6 +60,10 @@ if __name__ == '__main__':
 
         print('\nStarting ONNX export with onnx %s...' % onnx.__version__)
         f = opt.weights.replace('.pt', '.onnx')  # filename
+        if opt.include_resolution:
+            dot_idx = f.rfind('.')
+            f = f[:dot_idx] + f'_{opt.img_size[0]}x{opt.img_size[1]}' + f[dot_idx:]
+
         torch.onnx.export(model, img, f, verbose=False, opset_version=12, input_names=['images'],
                           output_names=['output'] if y is None else ['output'])
 
